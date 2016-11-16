@@ -4,6 +4,15 @@
 import sys
 import re
 
+def encode_sub(regex, subst, line):
+  #separates the first 3 and last 3 chars, aka the special case of start and end quotes
+  start = line[0:3]
+  end = line[-3:-1] + line[-1]
+  line = line[3:-3]
+  line = re.sub(regex, subst, line)
+  line = start + line + end
+  return line
+  
 def difference_calc(filename):
   #diff = # chars in the file - # chars in memory
   diff = 0
@@ -12,13 +21,13 @@ def difference_calc(filename):
   line_count = 0
   #create regex to filter out what isn't put into memory:
   #1) start and end quotes
-  re_quotes = re.compile("[\"].*[\"]")
+  re_start_end = re.compile('\A".*"\Z')
   #2) \\
-  re_backslash = re.compile("[\\\\][\\\\]")
+  re_backslash = re.compile(r"\\\\")
   #3) \"
-  re_quote = re.compile("[\\\\][\\\"]")
+  re_quote = re.compile(r"\\\"")
   #4) \x00 (where 00 is any hexadecimal pair)
-  re_hex = re.compile("[\\\\]x[0-9a-f][0-9a-f]")
+  re_hex = re.compile(r"\\x[0-9a-f][0-9a-f]")
   
   input = open(filename, 'rU')
   for line in input:
@@ -27,36 +36,69 @@ def difference_calc(filename):
     #count no of chars in the file per line
     line_count = len(line)
     file_count += line_count
-    #count no of chars put into memory
-    
     #check regex 1
-    if not re.match(re_quotes, line):
+    if not re.match(re_start_end, line):
       print "Error: Data contains a non-string"
       break
     else:
+      #there is no reason to overcomplicate things by using sub
+      #to remove the first and last character but none of the rest.
       line = line[1:-1]
-    
-    print "Before: "+ line,
     #check regex 2. can have multiple matches
-    line = re.sub(re_backslash, "\\\\", line)
+    line = re.sub(re_backslash, "b", line)
     #check regex 3, same^
-    line = re.sub(re_quote, "\"", line)
+    line = re.sub(re_quote, "q", line)
     #check regex 4
-    line = re.sub(re_hex, "H", line)
-    #debug
-    #debug block
-    print " and after: "+ line
-    #print "line: " + str(line_count+2),
-    #print "| backslash: " + str(len(re.sub(re_backslash, line))),
-    #print "| quote: "+ str(len(re.sub(re_quote, line))),
-    #print "| hex: "+ str(3*(len(re.sub(re_hex, line)))),
-    
-    #print "| total: " + str(line_count)
+    line = re.sub(re_hex, "h", line)
     #recalc line_count for the subbed string
     line_count = len(line)
     mem_count += line_count
     
   diff = file_count - mem_count
+  return diff
+  
+def encode_calc(filename):
+  #diff = # encoded chars - # chars in string
+  diff = 0
+  file_count = 0
+  encode_count = 0
+  line_count = 0
+  #create regex to match things that need encoding:
+  #1) \ becomes \\
+  re_backslash = re.compile(r"\\")
+  #2) " becomes \"
+  re_quote = re.compile(r"\"")
+  #3) start/end quote case
+  re_start_end = re.compile('\A".*"\Z')
+  
+  input = open(filename, 'rU')
+  for line in input:
+    #ignore whitespace the easy way: destroying all of it
+    line = ''.join(line.split())
+    #count no of chars in the file per line
+    line_count = len(line)
+    file_count += line_count
+    #
+    
+    #check regex 1. can have multiple matches
+    #line = re.sub(re_backslash, r"\\\\", line)
+    #check regex 2, same^
+    #line = re.sub(re_quote, r"\\\"", line)
+    #recalc line_count for the subbed string
+    #check regex 3
+    print "Before: "+ line
+    if not re.match(re_start_end, line):
+      print "Error: Data contains a non-string"
+      break
+    else:
+      #start and end quotes are special and must be preserved
+      line = line[0] + "\\\"" + line[1:-1] + "\\\"" + line[-1]
+    line = encode_sub(re_backslash, r"\\\\", line)
+    #check regex 3, same^
+    line = encode_sub(re_quote, r"\"", line)
+    print "After:  "+ line
+    encode_count += len(line)
+  diff = encode_count - file_count
   return diff
 
 def main():
@@ -64,11 +106,11 @@ def main():
     print 'Please specify an input file'
     sys.exit(1)
 
-  a = difference_calc(sys.argv[1])
-  print "(chars in the file) - (chars in memory) = " + str(a)
+  #a = difference_calc(sys.argv[1])
+  #print "(chars in the file) - (chars in memory) = " + str(a)
   
-  #b = bobby_logic_2(sys.argv[1])
-  #print "Wire A receives the signal " + str(a_signal)
+  b = encode_calc(sys.argv[1])
+  print "(encoded chars) - (literal chars) = " + str(b)
 
 if __name__ == '__main__':
   main()
